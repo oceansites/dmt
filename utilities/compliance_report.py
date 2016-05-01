@@ -1,4 +1,6 @@
 #!/usr/bin/env python
+# -*- coding: utf-8 -*-
+
 '''
 Script to provide OceanSITES compliance report for files in the GDAC
 
