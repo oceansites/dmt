@@ -24,6 +24,11 @@ check_suite = CheckSuite()
 check_suite.load_all_available_checkers()
 
 def main(args):
+    if args.format == 'summary':
+        rpt_fmt = '{},' * len(args.test)
+        report_fmt = '{},' + rpt_fmt[:-1]
+        print((report_fmt).format('url', *sorted(args.test)))
+
     for cat in args.catalog_url:
         select_str = ''
         if args.pattern:
@@ -38,9 +43,30 @@ def main(args):
                                         for s in d.services 
                                             if s.get("service").lower() == "opendap"):
 
-            # Send the compliance report to stdout
-            return_value, errors = ComplianceChecker.run_checker(
-                                        url, ['cf', 'acdd'], True, 'normal', '-', 'text')
+            if args.format == 'summary':
+                cs = CheckSuite()
+                if args.criteria == 'normal':
+                    limit = 2
+                elif args.criteria == 'strict':
+                    limit = 1
+                elif args.criteria == 'lenient':
+                    limit = 3
+                ds = cs.load_dataset(url)
+                score_groups = cs.run(ds, *args.test)
+
+                # Always use sorted test (groups) so they print in correct order
+                reports = []
+                for checker, rpair in sorted(score_groups.items()):
+                    groups, errors = rpair
+                    score_list, points, out_of = cs.get_points(groups, limit)
+                    reports.append(100 * points / out_of)
+                
+                print((report_fmt).format(url, *reports))
+            else:
+                # Send the compliance report to stdout
+                return_value, errors = ComplianceChecker.run_checker(
+                                        url, args.test, args.verbose, args.criteria,
+                                         args.output, args.format)
 
 def parse_command_line():
 
@@ -63,7 +89,7 @@ def parse_command_line():
                         default=0)
 
     parser.add_argument('-f', '--format', default='text',
-                        choices=['text', 'html', 'json'], help='Output format')
+                        choices=['text', 'html', 'json', 'summary'], help='Output format')
     parser.add_argument('-o', '--output', default='-', action='store',
                         help='Output filename')
     parser.add_argument('-V', '--version', action='store_true',
