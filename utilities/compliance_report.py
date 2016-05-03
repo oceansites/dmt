@@ -16,6 +16,7 @@ sys.path.insert(0, '/home/vagrant/dev/thredds_crawler')
 sys.path.insert(0, '/home/vagrant/dev/compliance-checker')
 
 import argparse
+import logging
 from thredds_crawler.crawl import Crawl
 from compliance_checker.runner import ComplianceChecker, CheckSuite
 
@@ -36,9 +37,14 @@ def main(args):
             select_str = r'.*{}.*'.format(args.pattern)
 
         if args.verbose:
-            c = Crawl(cat, select=[select_str], debug=True)
-        else:
-            c = Crawl(cat, select=[select_str], debug=False)
+            crawl_log = logging.getLogger('thredds_crawler')
+            crawl_log.setLevel(logging.DEBUG)
+            handler = logging.FileHandler('thredds_crawler.log')
+            formatter = logging.Formatter('%(asctime)s %(levelname)s %(message)s')
+            handler.setFormatter(formatter)
+            crawl_log.addHandler(handler)
+
+        c = Crawl(cat, select=[select_str], debug=False)
 
         for url in (s.get("url") for d in c.datasets 
                                         for s in d.services 
@@ -84,7 +90,7 @@ def parse_command_line():
                         choices = ['lenient', 'normal', 'strict'])
 
     parser.add_argument('--verbose', '-v',
-                        help="Increase output. May be specified up to three times.",
+                        help="Increase output. May be specified up to three times; thredds_crawler.log created in current dir.",
                         action="count",
                         default=0)
 
