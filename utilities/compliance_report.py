@@ -25,9 +25,10 @@ check_suite.load_all_available_checkers()
 
 def main(args):
     if args.format == 'summary':
-        rpt_fmt = '{},' * len(args.test)
+        hdr_fmt = '{},' * len(args.test)
+        rpt_fmt = '{:.1f},' * len(args.test)
         report_fmt = '{},' + rpt_fmt[:-1]
-        print((report_fmt).format('url', *sorted(args.test)))
+        print(('{},' + hdr_fmt[:-1]).format('url', *sorted(args.test)))
 
     for cat in args.catalog_url:
         select_str = ''
@@ -55,18 +56,17 @@ def main(args):
                 score_groups = cs.run(ds, *args.test)
 
                 # Always use sorted test (groups) so they print in correct order
-                reports = []
+                reports = {}
                 for checker, rpair in sorted(score_groups.items()):
-                    groups, errors = rpair
-                    score_list, points, out_of = cs.get_points(groups, limit)
-                    reports.append(100 * points / out_of)
+                    groups, _ = rpair
+                    _, points, out_of = cs.get_points(groups, limit)
+                    reports[checker] = (100 * float(points) / float(out_of))
                 
-                print((report_fmt).format(url, *reports))
+                print((report_fmt).format(url, *[reports[t] for t in sorted(args.test)]))
             else:
                 # Send the compliance report to stdout
-                return_value, errors = ComplianceChecker.run_checker(
-                                        url, args.test, args.verbose, args.criteria,
-                                         args.output, args.format)
+                ComplianceChecker.run_checker(url, args.test, args.verbose, args.criteria,
+                                              args.output, args.format)
 
 def parse_command_line():
 
