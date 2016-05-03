@@ -10,19 +10,47 @@ Mike McCann
 
 import sys
 
-# Temporary. Use local thredds-crawler and compliance-checker 
-# See: https://github.com/asascience-open/thredds_crawler/issues/16
-sys.path.insert(0, '/home/vagrant/dev/thredds_crawler')
-sys.path.insert(0, '/home/vagrant/dev/compliance-checker')
+# Temporary. Use local compliance-checker 
+# Assumes repos cloned into directories next to dmt repo clone
+sys.path.insert(0, '../../compliance-checker')
 
 import argparse
 import logging
-from thredds_crawler.crawl import Crawl
+import re
+import requests
+from bs4 import BeautifulSoup
 from compliance_checker.runner import ComplianceChecker, CheckSuite
 
 # Load all available checker classes
 check_suite = CheckSuite()
 check_suite.load_all_available_checkers()
+
+def get_opendap_urls(catalog_url):
+    '''Generates opendap urls for the datasets in catalog.
+    The `catalog_url` is the .xml link for a directory on a 
+    THREDDS Data Server.
+    '''
+    req = requests.get(catalog_url)
+    soup = BeautifulSoup(req.text, 'html.parser')
+
+    # Expect that this is a standard TDS with dodsC used for OPeNDAP
+    base_url = '/'.join(catalog_url.split('/')[:4]) + '/dodsC/'
+
+    # Search only for files ending in 'nc' and for pattern, if specified
+    search_str = '(?=.*nc$)'
+    if args.pattern:
+        search_str += ('(?=.*{}.*)').format(args.pattern)
+
+    # Site level catalog has dataset elements
+    for e in soup.findAll('dataset', attrs={'urlpath': re.compile(search_str)}):
+        yield base_url + e['urlpath']
+
+    # Top (GDAC) level catalog specified, look for 'catalogref's and drill down
+    for e in soup.findAll('catalogref', attrs={'id': re.compile("DATA")}):
+        req = requests.get(('{}{}/catalog.xml').format(base_url, e['id']))
+        soup = BeautifulSoup(req.text, 'html.parser')
+        for e in soup.findAll('dataset', attrs={'urlpath': re.compile(search_str)}):
+            yield base_url + e['urlpath']
 
 def main(args):
     if args.format == 'summary':
@@ -32,23 +60,7 @@ def main(args):
         print(('{},' + hdr_fmt[:-1]).format('url', *sorted(args.test)))
 
     for cat in args.catalog_url:
-        select_str = ''
-        if args.pattern:
-            select_str = r'.*{}.*'.format(args.pattern)
-
-        if args.verbose:
-            crawl_log = logging.getLogger('thredds_crawler')
-            crawl_log.setLevel(logging.DEBUG)
-            handler = logging.FileHandler('thredds_crawler.log')
-            formatter = logging.Formatter('%(asctime)s %(levelname)s %(message)s')
-            handler.setFormatter(formatter)
-            crawl_log.addHandler(handler)
-
-        c = Crawl(cat, select=[select_str], debug=False)
-
-        for url in (s.get("url") for d in c.datasets 
-                                        for s in d.services 
-                                            if s.get("service").lower() == "opendap"):
+        for url in get_opendap_urls(cat):
 
             if args.format == 'summary':
                 cs = CheckSuite()
@@ -78,7 +90,7 @@ def parse_command_line():
 
     parser = argparse.ArgumentParser()
     parser.add_argument('--pattern', '-p', '--pattern=', '-p=', 
-                        help="Select text for thredds_crawler: 'select=[.*<pattern>.*]'")
+                        help="String to restrict filename matching to.")
     parser.add_argument('--test', '-t', '--test=', '-t=', default=('acdd',),
                         nargs='+',
                         choices=sorted(check_suite.checkers.keys()),
@@ -90,7 +102,7 @@ def parse_command_line():
                         choices = ['lenient', 'normal', 'strict'])
 
     parser.add_argument('--verbose', '-v',
-                        help="Increase output. May be specified up to three times; thredds_crawler.log created in current dir.",
+                        help="Increase output. May be specified up to three times.",
                         action="count",
                         default=0)
 
