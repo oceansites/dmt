@@ -81,6 +81,8 @@ def main(args):
                     reports[checker] = (100 * float(points) / float(out_of))
                 
                 print((report_fmt).format(url, *[reports[t] for t in sorted(args.test)]))
+                sys.stdout.flush()
+
             else:
                 # Send the compliance report to stdout
                 ComplianceChecker.run_checker(url, args.test, args.verbose, args.criteria,
